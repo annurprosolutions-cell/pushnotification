@@ -1,0 +1,1798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- PWA Meta Tags & Manifest -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/nL1yRcWv/energy-services.png">
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/nL1yRcWv/energy-services.png">
+    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22Voltake%20Dashboard%22%2C%22short_name%22%3A%22Voltake%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f8fafc%22%2C%22theme_color%22%3A%22%230f172a%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22https%3A%2F%2Fi.postimg.cc%2FnL1yRcWv%2Fenergy-services.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%2C%7B%22src%22%3A%22https%3A%2F%2Fi.postimg.cc%2FnL1yRcWv%2Fenergy-services.png%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
+
+    <title>Engineering Ops Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FIREBASE SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Hide scrollbar for top header filter on mobile but allow scroll */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+
+        /* Tech Loading Animations */
+        @keyframes scan {
+            0% { top: -10%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 110%; opacity: 0; }
+        }
+        .tech-logo {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(14, 165, 233, 0.3); transform: scale(1); }
+            50% { box-shadow: 0 0 40px rgba(14, 165, 233, 0.8); transform: scale(1.05); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans h-screen flex overflow-hidden">
+
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-30 hidden md:hidden transition-opacity" onclick="toggleSidebar()"></div>
+
+    <!-- Error/System Modal -->
+    <div id="error-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 transform transition-all">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4" id="modal-icon-bg">
+                <i class="fa-solid fa-circle-info text-slate-500 text-xl" id="modal-icon"></i>
+            </div>
+            <h3 class="text-lg font-medium text-center text-slate-800 mb-2" id="error-modal-title">System Message</h3>
+            <p class="text-sm text-center text-slate-500 mb-6" id="error-modal-msg">Failed to process your request.</p>
+            <button onclick="closeModal('error-modal')" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 px-4 rounded-lg transition-colors">
+                Tutup
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal: Manager Approval -->
+    <div id="manager-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all">
+            <div class="bg-slate-900 px-6 py-4 flex justify-between items-center">
+                <h3 class="text-white font-semibold">Tindakan Pengurus (Manager)</h3>
+                <button onclick="closeModal('manager-modal')" class="text-slate-400 hover:text-white transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <p class="text-xs text-slate-500 uppercase font-semibold mb-1">Butiran Report</p>
+                    <p class="font-bold text-brand-600" id="mgr-report-id">RPT-000</p>
+                    <p class="text-sm text-slate-700 mt-1 line-clamp-1" id="mgr-project-title">Project Name</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Keputusan Kelulusan <span class="text-red-500">*</span></label>
+                    <select id="mgr-status-input" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500 bg-white">
+                        <option value="Approved">Lulus (Approve) - Sedia untuk Inbois</option>
+                        <option value="Approved with Attachment">Lulus bersyarat (Need Attachment)</option>
+                        <option value="Rejected">Ditolak (Reject) - Sila semak semula</option>
+                    </select>
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nota / Arahan (Opsional)</label>
+                    <textarea id="mgr-remarks-input" rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-brand-500 focus:border-brand-500" placeholder="Contoh: Sila sertakan gambar before/after sebelum hantar inbois..."></textarea>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button onclick="closeModal('manager-modal')" class="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50 transition">Batal</button>
+                    <button onclick="submitManagerApproval()" class="flex-1 bg-brand-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-brand-700 transition shadow-md">Simpan Keputusan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Upload Invoice (Admin) -->
+    <div id="invoice-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all">
+            <div class="bg-indigo-600 px-6 py-4 flex justify-between items-center">
+                <h3 class="text-white font-semibold">Kemas Kini Inbois (Admin)</h3>
+                <button onclick="closeModal('invoice-modal')" class="text-indigo-200 hover:text-white transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-6">
+                <div class="mb-4 flex items-center justify-between bg-indigo-50 p-3 rounded-lg border border-indigo-100">
+                    <div>
+                        <p class="text-xs text-indigo-500 uppercase font-semibold mb-0.5">Report ID</p>
+                        <p class="font-bold text-indigo-900" id="inv-report-id">RPT-000</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-indigo-500 uppercase font-semibold mb-0.5">Status Pengurus</p>
+                        <div id="inv-mgr-badge" class="mt-1"></div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Nombor Inbois <span class="text-red-500">*</span></label>
+                    <input type="text" id="inv-number-input" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-indigo-500 focus:border-indigo-500 uppercase" placeholder="Contoh: INV-2026-0012">
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Muat Naik PDF Inbois (Opsional)</label>
+                    <!-- Tukar input file sebenar -->
+                    <input type="file" id="inv-file-input" accept="application/pdf" class="hidden" onchange="handleInvoiceFile(event)">
+                    <div id="inv-upload-box" class="border-2 border-dashed border-slate-300 rounded-lg p-6 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer group" onclick="document.getElementById('inv-file-input').click()">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-cloud-arrow-up text-lg"></i>
+                        </div>
+                        <p class="text-sm font-medium text-slate-700">Klik untuk muat naik PDF</p>
+                        <p class="text-xs text-slate-500 mt-1">Sokong format .pdf (Maksimum 5MB)</p>
+                    </div>
+                    <!-- Paparan nama fail jika berjaya upload -->
+                    <div id="inv-file-preview" class="hidden mt-2 flex items-center justify-between bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-file-pdf text-red-500 mr-2"></i>
+                            <span id="inv-file-name" class="text-xs font-medium text-slate-700 truncate max-w-[200px]"></span>
+                        </div>
+                        <button onclick="removeInvoiceFile(event)" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button onclick="closeModal('invoice-modal')" class="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-50 transition">Batal</button>
+                    <button onclick="submitInvoice()" class="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-check mr-2"></i> Hantar Inbois
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: PDF Preview -->
+    <div id="pdf-preview-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[200] hidden items-center justify-center p-2 md:p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden transform transition-all">
+            <div class="bg-slate-800 px-4 py-3 flex justify-between items-center shrink-0">
+                <div class="flex items-center space-x-2 text-white">
+                    <i class="fa-regular fa-file-pdf text-red-400 text-lg"></i>
+                    <h3 class="font-semibold text-sm md:text-base" id="pdf-preview-title">Document Preview</h3>
+                </div>
+                <button onclick="closePdfModal()" class="text-slate-400 hover:text-white transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-700">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="flex-1 bg-slate-200 relative w-full h-full">
+                <!-- Loading Spinner di belakang Iframe -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center z-0 text-slate-400">
+                    <div class="w-8 h-8 border-4 border-slate-300 border-t-brand-500 rounded-full animate-spin mb-2"></div>
+                    <span class="text-xs font-medium">Memuatkan Dokumen...</span>
+                </div>
+                <iframe id="pdf-preview-iframe" class="w-full h-full relative z-10 border-0 bg-transparent" src=""></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-64 bg-slate-900 text-white flex-col shadow-xl z-40 fixed inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out flex">
+        <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white p-1 rounded-lg w-10 h-10 flex items-center justify-center shrink-0">
+                    <img src="https://i.postimg.cc/nL1yRcWv/energy-services.png" alt="Voltake Logo" class="max-h-full max-w-full">
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-wide">Voltake</h1>
+                    <p class="text-xs text-slate-400">Field Service Monitor</p>
+                </div>
+            </div>
+            <!-- Close Sidebar button for mobile -->
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-2">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+        
+        <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto" id="sidebar-nav">
+            <button onclick="switchTab('overview')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg bg-brand-600 text-white transition-colors" data-target="overview">
+                <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                <span>Overview</span>
+            </button>
+            <button onclick="switchTab('monitoring')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="monitoring">
+                <i class="fa-solid fa-table-list w-5 text-center"></i>
+                <span>Job Monitoring</span>
+            </button>
+            <button onclick="switchTab('issues')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="issues">
+                <i class="fa-solid fa-triangle-exclamation w-5 text-center"></i>
+                <span>Issue & Risk</span>
+            </button>
+            <button onclick="switchTab('performance')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="performance">
+                <i class="fa-solid fa-users-gear w-5 text-center"></i>
+                <span>Performance</span>
+            </button>
+            <button onclick="switchTab('documents')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="documents">
+                <i class="fa-solid fa-file-signature w-5 text-center"></i>
+                <span>Document</span>
+            </button>
+            <button onclick="switchTab('billing')" class="nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="billing">
+                <i class="fa-solid fa-file-invoice-dollar w-5 text-center text-emerald-400"></i>
+                <span>Billing & Approval</span>
+            </button>
+        </nav>
+
+        <!-- Back to Form Button -->
+        <div class="px-4 pb-4">
+            <a href="/" class="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white py-2.5 rounded-lg text-sm font-medium transition-colors border border-slate-700 shadow-sm">
+                <i class="fa-solid fa-arrow-left-long"></i>
+                <span>Back to Form</span>
+            </a>
+        </div>
+
+        <div class="p-4 border-t border-slate-800">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold">
+                    AD
+                </div>
+                <div class="text-sm">
+                    <p class="font-medium">Admin User</p>
+                    <p class="text-xs text-slate-400">System Admin</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sidebar Footer -->
+        <div class="px-4 py-3 bg-slate-950 text-center text-[10px] text-slate-500 border-t border-slate-800">
+            &copy; 2026 All Right Reserved by Voltake
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <!-- Top Header -->
+        <header class="bg-white shadow-sm border-b border-slate-200 py-3 px-4 md:px-6 flex flex-col lg:flex-row lg:justify-between lg:items-center z-10 gap-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <button onclick="toggleSidebar()" class="md:hidden text-slate-500 hover:text-slate-800 p-1">
+                        <i class="fa-solid fa-bars text-xl"></i>
+                    </button>
+                    <h2 id="page-title" class="text-lg md:text-xl font-semibold text-slate-800">Overview Dashboard</h2>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 md:space-x-3 overflow-x-auto pb-1 lg:pb-0 no-scrollbar w-full lg:w-auto">
+                
+                <!-- Butang Loceng Firebase -->
+                <button id="btn-notification" onclick="requestNotificationPermission()" class="shrink-0 bg-white border border-slate-300 text-slate-700 w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center hover:bg-brand-50 hover:text-brand-600 transition relative" title="Aktifkan Notifikasi">
+                    <i class="fa-regular fa-bell"></i>
+                </button>
+
+                <!-- Global Date Filter -->
+                <div class="flex items-center bg-slate-50 p-1 rounded-md border border-slate-200 shrink-0">
+                    <div class="flex items-center">
+                        <span class="text-xs text-slate-500 mx-1 md:mx-2 font-medium">Mula:</span>
+                        <input type="date" id="date-start" class="text-xs bg-white border border-slate-300 rounded px-1.5 py-1 md:px-2 text-slate-700 outline-none focus:border-brand-500" onchange="applyGlobalDateFilter()">
+                    </div>
+                    <span class="text-xs text-slate-400 mx-1 md:mx-2">-</span>
+                    <div class="flex items-center">
+                        <span class="text-xs text-slate-500 mr-1 md:mr-2 font-medium hidden sm:inline">Akhir:</span>
+                        <input type="date" id="date-end" class="text-xs bg-white border border-slate-300 rounded px-1.5 py-1 md:px-2 text-slate-700 outline-none focus:border-brand-500" onchange="applyGlobalDateFilter()">
+                    </div>
+                    <button onclick="clearDateFilter()" class="text-slate-400 hover:text-red-500 px-2 md:px-3 border-l border-slate-200 ml-1 md:ml-2" title="Reset Filter">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="text-sm text-slate-500 hidden xl:block shrink-0 px-2">
+                    <i class="fa-regular fa-clock mr-1"></i> <span id="current-time"></span>
+                </div>
+                <button onclick="fetchData()" class="shrink-0 bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-slate-50 transition flex items-center">
+                    <i class="fa-solid fa-rotate-right sm:mr-2 text-brand-500"></i> <span class="hidden sm:inline">Refresh</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Loading Overlay (Digital Tech Style) -->
+        <div id="loading-overlay" class="fixed inset-0 bg-slate-900/85 backdrop-blur-md z-[100] flex flex-col items-center justify-center">
+            <div class="relative flex items-center justify-center mb-8 mt-[-50px]">
+                <!-- Outer spinning rings -->
+                <div class="absolute rounded-full border-t-2 border-r-2 border-brand-500 animate-spin" style="width: 140px; height: 140px;"></div>
+                <div class="absolute rounded-full border-b-2 border-l-2 border-brand-300 animate-[spin_3s_linear_reverse]" style="width: 160px; height: 160px;"></div>
+                
+                <!-- Logo container -->
+                <div class="bg-white p-4 rounded-full w-28 h-28 flex items-center justify-center relative overflow-hidden z-10 tech-logo">
+                    <img src="https://i.postimg.cc/nL1yRcWv/energy-services.png" alt="Voltake Loading" class="w-full h-full object-contain relative z-10">
+                    <!-- Scanning line -->
+                    <div class="absolute left-0 right-0 h-[2px] bg-brand-400 opacity-60 shadow-[0_0_12px_3px_#0ea5e9] animate-[scan_1.5s_linear_infinite] z-20"></div>
+                </div>
+            </div>
+            
+            <div class="flex flex-col items-center">
+                <h3 class="text-brand-400 font-bold tracking-[0.2em] uppercase text-sm mb-3 animate-pulse">System Initializing</h3>
+                <div class="flex space-x-2">
+                    <div class="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                    <div class="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+                <p class="text-slate-400 text-xs mt-4 font-mono">Syncing securely with database...</p>
+            </div>
+        </div>
+
+        <!-- Scrollable Content Area -->
+        <div class="flex-1 overflow-y-auto p-6">
+            
+            <!-- TAB 1: OVERVIEW -->
+            <div id="tab-overview" class="tab-content active">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 mb-1">Total Reports</p>
+                            <h3 class="text-3xl font-bold text-slate-800" id="kpi-total">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 mb-1">Completed Jobs</p>
+                            <h3 class="text-3xl font-bold text-emerald-600" id="kpi-completed">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-check-double"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 mb-1">Pending Approval</p>
+                            <h3 class="text-3xl font-bold text-amber-500" id="kpi-pending">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex items-center justify-between cursor-pointer hover:border-red-200 transition" onclick="switchTab('issues')">
+                        <div>
+                            <p class="text-sm font-medium text-slate-500 mb-1">Unresolved Issues</p>
+                            <h3 class="text-3xl font-bold text-red-500" id="kpi-issues">-</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Area -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- Status Chart -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <h3 class="text-base font-semibold text-slate-800 mb-4">Jobs by Status</h3>
+                        <div class="relative h-64 w-full flex justify-center">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                    <!-- Activity Chart -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6 lg:col-span-2">
+                        <h3 class="text-base font-semibold text-slate-800 mb-4">Report Submissions (Last 7 Days)</h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity Table -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h3 class="text-base font-semibold text-slate-800">Recent Reports</h3>
+                        <button onclick="switchTab('monitoring')" class="text-sm text-brand-600 hover:text-brand-800 font-medium">View All &rarr;</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3 font-medium">Date/Time</th>
+                                    <th class="px-6 py-3 font-medium">Project</th>
+                                    <th class="px-6 py-3 font-medium">Client</th>
+                                    <th class="px-6 py-3 font-medium">Staff</th>
+                                    <th class="px-6 py-3 font-medium">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-table-body" class="divide-y divide-slate-100">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: JOB MONITORING -->
+            <div id="tab-monitoring" class="tab-content">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col h-full">
+                    <!-- Filters -->
+                    <div class="p-6 border-b border-slate-100 bg-slate-50/50">
+                        <div class="flex flex-col md:flex-row gap-4 items-end">
+                            <div class="flex-1 w-full">
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Search Project/Client</label>
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                        <i class="fa-solid fa-search text-slate-400"></i>
+                                    </div>
+                                    <input type="text" id="search-job" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full pl-10 p-2.5" placeholder="Search..." onkeyup="filterJobs()">
+                                </div>
+                            </div>
+                            <div class="w-full md:w-48">
+                                <label class="block text-xs font-medium text-slate-500 mb-1">Status Filter</label>
+                                <select id="filter-status" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5" onchange="filterJobs()">
+                                    <option value="">All Statuses</option>
+                                    <!-- Populated by JS -->
+                                </select>
+                            </div>
+                            <button onclick="filterJobs()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition">
+                                Filter
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Table -->
+                    <div class="overflow-x-auto flex-1">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-100 sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th class="px-6 py-4 font-medium whitespace-nowrap">Report ID</th>
+                                    <th class="px-6 py-4 font-medium whitespace-nowrap">Date</th>
+                                    <th class="px-6 py-4 font-medium">Client / Project</th>
+                                    <th class="px-6 py-4 font-medium">Location</th>
+                                    <th class="px-6 py-4 font-medium">Time (In-Out)</th>
+                                    <th class="px-6 py-4 font-medium">Staff In-Charge</th>
+                                    <th class="px-6 py-4 font-medium">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitoring-table-body" class="divide-y divide-slate-100 bg-white">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: ISSUE & RISK -->
+            <div id="tab-issues" class="tab-content">
+                <div class="mb-6 flex justify-between items-end">
+                    <div>
+                        <h3 class="text-lg font-semibold text-slate-800">Unresolved Issues Log</h3>
+                        <p class="text-sm text-slate-500 mt-1">Jobs requiring immediate attention or follow-up.</p>
+                    </div>
+                    <div class="bg-red-50 text-red-600 px-4 py-2 rounded-lg font-bold text-sm border border-red-100 flex items-center">
+                        <i class="fa-solid fa-circle-exclamation mr-2"></i>
+                        <span id="issue-count-badge">0</span> Active Issues
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 gap-4" id="issues-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- TAB 4: PERFORMANCE -->
+            <div id="tab-performance" class="tab-content">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <!-- Staff Performance Chart -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <h3 class="text-base font-semibold text-slate-800 mb-4">Jobs Completed by Staff</h3>
+                        <div class="relative h-72 w-full">
+                            <canvas id="staffChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Client Distribution -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <h3 class="text-base font-semibold text-slate-800 mb-4">Top Clients Distribution</h3>
+                        <div class="relative h-72 w-full">
+                            <canvas id="clientChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Staff Table -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 class="text-base font-semibold text-slate-800">Staff Workload Summary</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50">
+                                <tr>
+                                    <th class="px-6 py-3 font-medium">Staff Name</th>
+                                    <th class="px-6 py-3 font-medium">Position</th>
+                                    <th class="px-6 py-3 font-medium text-center">Total Jobs</th>
+                                    <th class="px-6 py-3 font-medium">Recent Job Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-table-body" class="divide-y divide-slate-100">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: DOCUMENT -->
+            <div id="tab-documents" class="tab-content">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                        <h3 class="text-base font-semibold text-slate-800">Document & Approval Tracking</h3>
+                        <div class="flex space-x-2">
+                             <input type="text" id="search-doc" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-64 p-2" placeholder="Search Report ID..." onkeyup="filterDocs()">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-100">
+                                <tr>
+                                    <th class="px-6 py-4 font-medium">Report Info</th>
+                                    <th class="px-6 py-4 font-medium">Client PIC</th>
+                                    <th class="px-6 py-4 font-medium">Draft PDF</th>
+                                    <th class="px-6 py-4 font-medium">Approval Status</th>
+                                    <th class="px-6 py-4 font-medium">Final PDF</th>
+                                    <th class="px-6 py-4 font-medium text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="document-table-body" class="divide-y divide-slate-100">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 6: BILLING & APPROVAL -->
+            <div id="tab-billing" class="tab-content">
+                <!-- Summary/Filter Bar -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-500 font-medium uppercase">Pending Manager</p>
+                            <h3 class="text-2xl font-bold text-amber-500" id="bill-kpi-mgr">0</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center">
+                            <i class="fa-solid fa-user-tie"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-500 font-medium uppercase">Pending Invoice</p>
+                            <h3 class="text-2xl font-bold text-blue-500" id="bill-kpi-inv">0</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-slate-500 font-medium uppercase">Invoiced / Done</p>
+                            <h3 class="text-2xl font-bold text-emerald-500" id="bill-kpi-done">0</h3>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                            <i class="fa-solid fa-check-double"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h3 class="text-base font-semibold text-slate-800">Billing & Manager Approval</h3>
+                            <p class="text-xs text-slate-500">Manage approvals and track invoice submissions.</p>
+                        </div>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full md:w-auto">
+                             <select id="filter-billing-status" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block p-2" onchange="filterBilling()">
+                                 <option value="">Semua Status</option>
+                                 <option value="pending_manager">Pending Manager Approval</option>
+                                 <option value="pending_invoice">Pending Upload Invoice</option>
+                                 <option value="completed">Invoiced / Completed</option>
+                             </select>
+                             <input type="text" id="search-billing" class="bg-white border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full sm:w-64 p-2" placeholder="Search ID or Client..." onkeyup="filterBilling()">
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-100">
+                                <tr>
+                                    <th class="px-6 py-4 font-medium">Report Details</th>
+                                    <th class="px-6 py-4 font-medium">GWR Status</th>
+                                    <th class="px-6 py-4 font-medium">Manager Approval</th>
+                                    <th class="px-6 py-4 font-medium">Invoice Info</th>
+                                    <th class="px-6 py-4 font-medium text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="billing-table-body" class="divide-y divide-slate-100">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="billing-pagination" class="p-4 border-t border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <!-- Pagination controls by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer for Main Content (Visible on Mobile) -->
+            <footer class="mt-8 pt-4 pb-2 text-center md:hidden">
+                <p class="text-xs text-slate-400">&copy; 2026 All Right Reserved by Voltake</p>
+            </footer>
+
+        </div>
+    </main>
+
+    <script>
+        // Data Source
+        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQGvo9FEp4l0WBLzjkJz9gk1PydcH386kxq2Qe3PodZzuh69de4GhXowe32nxkfme6L2d-nPtWI-u9i/pub?output=csv';
+        const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw7JXlTtCDUsI3vk1uxar3jXXJwimZxrGm9MGUQDwnGNb6fYoeE3AJP9XtlXQUk4QlTrw/exec';
+        
+        // ==========================================
+        // FIREBASE SETUP (Tukar Kunci Ini!)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBuJrhF_vZp0XrTuIyqrwhA97ZRLIyEyws",
+            authDomain: "push-notification-e1c27.firebaseapp.com",
+            projectId: "push-notification-e1c27",
+            storageBucket: "push-notification-e1c27.firebasestorage.app",
+            messagingSenderId: "300221580577",
+            appId: "1:300221580577:web:8d569cdb0c6002b9cfaa60"
+        };
+        const FIREBASE_VAPID_KEY = "M0MLdAPBuEneBZlhQ8Z00aWpSVwkoP7zbIwPURSdo3A";
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const messaging = firebase.messaging();
+
+        function requestNotificationPermission() {
+            const btnBell = document.getElementById('btn-notification');
+            
+            Notification.requestPermission().then((permission) => {
+                if (permission === 'granted') {
+                    btnBell.innerHTML = '<i class="fa-solid fa-bell text-brand-500"></i>';
+                    
+                    messaging.getToken({ vapidKey: FIREBASE_VAPID_KEY }).then((currentToken) => {
+                        if (currentToken) {
+                            console.log("FCM Token:", currentToken);
+                            saveTokenToAppsScript(currentToken);
+                        } else {
+                            showSystemMessage("Notifikasi", "Gagal mendapatkan token pendaftaran. Pastikan Service Worker wujud.", "warning");
+                        }
+                    }).catch((err) => {
+                        console.error('An error occurred while retrieving token. ', err);
+                    });
+                } else {
+                    showSystemMessage("Akses Ditolak", "Anda tidak membenarkan notifikasi dihantar ke pelayar ini.", "error");
+                }
+            });
+        }
+
+        function saveTokenToAppsScript(token) {
+            fetch(APP_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'save_fcm_token', fcmToken: token })
+            }).then(res => res.json()).then(data => {
+                if(data.status === 'success') {
+                    showSystemMessage("Berjaya", "Sistem notifikasi diaktifkan untuk peranti ini.", "success");
+                }
+            });
+        }
+
+        // Handle notifikasi masuk semasa App sedang dibuka (Foreground)
+        messaging.onMessage((payload) => {
+            showSystemMessage("Notifikasi Baru: " + payload.notification.title, payload.notification.body, "info");
+            fetchData(); // Automatik refresh data bila ada notifikasi masuk
+        });
+
+        // Global State
+        let globalData = [];
+        let dateFilteredData = [];
+        let charts = {};
+        
+        // For Active Actions
+        let activeActionReportId = null;
+        let invoiceBase64Data = null; // Menyimpan data file sebelum submit
+
+        // Utility: Update Clock
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('current-time').innerText = now.toLocaleString('en-MY', { 
+                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', 
+                hour: '2-digit', minute:'2-digit'
+            });
+        }, 1000);
+
+        // Utility: Show Custom System Message Modal
+        function showSystemMessage(title, msg, type = 'info') {
+            document.getElementById('error-modal-title').innerText = title;
+            document.getElementById('error-modal-msg').innerText = msg;
+            
+            const iconBg = document.getElementById('modal-icon-bg');
+            const icon = document.getElementById('modal-icon');
+            
+            // Reset classes
+            iconBg.className = "w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4";
+            icon.className = "text-xl";
+            
+            if (type === 'error') {
+                iconBg.classList.add('bg-red-100');
+                icon.classList.add('fa-solid', 'fa-triangle-exclamation', 'text-red-500');
+            } else if (type === 'warning') {
+                iconBg.classList.add('bg-amber-100');
+                icon.classList.add('fa-solid', 'fa-circle-exclamation', 'text-amber-500');
+            } else if (type === 'success') {
+                iconBg.classList.add('bg-emerald-100');
+                icon.classList.add('fa-solid', 'fa-check', 'text-emerald-500');
+            } else {
+                iconBg.classList.add('bg-blue-100');
+                icon.classList.add('fa-solid', 'fa-circle-info', 'text-blue-500');
+            }
+
+            const modal = document.getElementById('error-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Utility: PDF Preview Modal Logic
+        function openPdfModal(url, title) {
+            // Google Drive iframe perlukan '/preview' berbanding '/view'
+            const embedUrl = url.replace('/view', '/preview'); 
+            document.getElementById('pdf-preview-title').innerText = 'Preview: ' + (title || 'Document');
+            document.getElementById('pdf-preview-iframe').src = embedUrl;
+            
+            const modal = document.getElementById('pdf-preview-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closePdfModal() {
+            const modal = document.getElementById('pdf-preview-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            
+            // Padam link iframe selepas tutup untuk jimat RAM browser
+            setTimeout(() => {
+                document.getElementById('pdf-preview-iframe').src = '';
+            }, 300);
+        }
+
+        // ----- INTEGRASI PENUH (LIVE): MANAGER APPROVAL -----
+        function openManagerModal(reportId) {
+            activeActionReportId = reportId;
+            const row = globalData.find(r => r.ReportID === reportId);
+            
+            if(row) {
+                document.getElementById('mgr-report-id').innerText = row.ReportID;
+                document.getElementById('mgr-project-title').innerText = row.ProjectTitle || 'No Title';
+                // Set existing values if already edited previously
+                document.getElementById('mgr-status-input').value = (row.ManagerApproval && row.ManagerApproval !== 'Pending') ? row.ManagerApproval : 'Approved';
+                document.getElementById('mgr-remarks-input').value = row.ManagerRemarks || '';
+            }
+            
+            document.getElementById('manager-modal').classList.remove('hidden');
+            document.getElementById('manager-modal').classList.add('flex');
+        }
+
+        function submitManagerApproval() {
+            const status = document.getElementById('mgr-status-input').value;
+            const remarks = document.getElementById('mgr-remarks-input').value;
+            
+            closeModal('manager-modal');
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            const payload = {
+                action: 'manager_approve',
+                reportId: activeActionReportId,
+                managerApproval: status,
+                managerRemarks: remarks
+            };
+
+            fetch(APP_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    showSystemMessage("Berjaya", "Tindakan Pengurus (Manager) telah berjaya dikemas kini.", "success");
+                    fetchData(); // Refetch LIVE data from Google Sheets
+                } else {
+                    showSystemMessage("Gagal", data.message, "error");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                }
+            })
+            .catch(err => {
+                showSystemMessage("Ralat Sistem", "Masalah sistem semasa memproses kelulusan.", "error");
+                console.error(err);
+                document.getElementById('loading-overlay').style.display = 'none';
+            });
+        }
+
+        // ----- INTEGRASI PENUH (LIVE): ADMIN INVOICE -----
+        
+        // Logik menukar fail PDF inbois kepada format Base64 (Untuk di-upload ke Drive)
+        function handleInvoiceFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            if (file.type !== "application/pdf") {
+                alert("Sila muat naik format PDF sahaja.");
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                alert("Saiz fail terlalu besar (Maksima 5MB).");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                invoiceBase64Data = e.target.result;
+                // Update UI UI to show file selected
+                document.getElementById('inv-upload-box').classList.add('hidden');
+                document.getElementById('inv-file-preview').classList.remove('hidden');
+                document.getElementById('inv-file-name').innerText = file.name;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeInvoiceFile(e) {
+            e.stopPropagation();
+            invoiceBase64Data = null;
+            document.getElementById('inv-file-input').value = "";
+            document.getElementById('inv-upload-box').classList.remove('hidden');
+            document.getElementById('inv-file-preview').classList.add('hidden');
+        }
+
+        function openInvoiceModal(reportId) {
+            activeActionReportId = reportId;
+            invoiceBase64Data = null; // Reset setiap kali buka modal
+            
+            // Reset UI Modal Input
+            document.getElementById('inv-number-input').value = '';
+            document.getElementById('inv-file-input').value = '';
+            document.getElementById('inv-upload-box').classList.remove('hidden');
+            document.getElementById('inv-file-preview').classList.add('hidden');
+
+            const row = globalData.find(r => r.ReportID === reportId);
+            if(row) {
+                document.getElementById('inv-report-id').innerText = row.ReportID;
+                document.getElementById('inv-number-input').value = row.InvoiceNumber && row.InvoiceNumber !== '-' ? row.InvoiceNumber : '';
+                document.getElementById('inv-mgr-badge').innerHTML = getManagerBadge(row.ManagerApproval || 'Pending');
+            }
+            
+            document.getElementById('invoice-modal').classList.remove('hidden');
+            document.getElementById('invoice-modal').classList.add('flex');
+        }
+
+        function submitInvoice() {
+            const invNumber = document.getElementById('inv-number-input').value.trim();
+            
+            if(!invNumber) {
+                alert("Sila masukkan Nombor Inbois!"); 
+                return;
+            }
+
+            closeModal('invoice-modal');
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            const payload = {
+                action: 'admin_invoice',
+                reportId: activeActionReportId,
+                invNumber: invNumber,
+                invoicePdfBase64: invoiceBase64Data // Boleh jadi null jika admin tak upload apa-apa fail
+            };
+
+            fetch(APP_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    showSystemMessage("Berjaya", "Inbois berjaya dikemas kini.", "success");
+                    fetchData(); // Refetch LIVE data
+                } else {
+                    showSystemMessage("Gagal", data.message, "error");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                }
+            })
+            .catch(err => {
+                showSystemMessage("Ralat Sistem", "Masalah komunikasi dengan pelayan (server) semasa proses muat naik.", "error");
+                console.error(err);
+                document.getElementById('loading-overlay').style.display = 'none';
+            });
+        }
+
+        // Utility: Status Badge Styling
+        function getStatusBadge(status) {
+            const s = status ? status.toLowerCase() : '';
+            if(s.includes('complete') || s.includes('approved')) return `<span class="px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">${status || 'Completed'}</span>`;
+            if(s.includes('pending') || s.includes('draft')) return `<span class="px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700 border border-amber-200">${status || 'Pending'}</span>`;
+            if(s.includes('cancel') || s.includes('reject')) return `<span class="px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700 border border-red-200">${status || 'Rejected'}</span>`;
+            return `<span class="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-slate-700 border border-slate-200">${status || 'N/A'}</span>`;
+        }
+
+        function getManagerBadge(status) {
+            const s = status ? status.toLowerCase() : '';
+            if(s.includes('approved')) return `<span class="px-2 py-0.5 text-[10px] font-medium rounded bg-emerald-100 text-emerald-700 border border-emerald-200">${status}</span>`;
+            if(s.includes('reject')) return `<span class="px-2 py-0.5 text-[10px] font-medium rounded bg-red-100 text-red-700 border border-red-200">${status}</span>`;
+            return `<span class="px-2 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700 border border-amber-200">${status || 'Pending'}</span>`;
+        }
+
+        // Mobile Sidebar Toggle Logic
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            
+            if (sidebar.classList.contains('-translate-x-full')) {
+                sidebar.classList.remove('-translate-x-full');
+                backdrop.classList.remove('hidden');
+                backdrop.classList.add('block');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                backdrop.classList.add('hidden');
+                backdrop.classList.remove('block');
+            }
+        }
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            Chart.defaults.font.family = 'Inter, sans-serif';
+            Chart.defaults.color = '#64748b';
+            fetchData();
+        });
+
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            const titles = {
+                'overview': 'Overview Dashboard',
+                'monitoring': 'Job Monitoring',
+                'issues': 'Issue & Risk Management',
+                'performance': 'Staff & Client Performance',
+                'documents': 'Document & Approval',
+                'billing': 'Billing & Approval'
+            };
+            document.getElementById('page-title').innerText = titles[tabId];
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                if(btn.dataset.target === tabId) {
+                    btn.className = "nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg bg-brand-600 text-white transition-colors shadow-md";
+                } else {
+                    btn.className = "nav-btn w-full flex items-center space-x-3 px-4 py-3 text-sm font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors";
+                }
+            });
+
+            if(tabId === 'performance') {
+                if(charts.staff) charts.staff.update();
+                if(charts.client) charts.client.update();
+            }
+
+            if (window.innerWidth < 768) {
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar.classList.contains('-translate-x-full')) {
+                    toggleSidebar();
+                }
+            }
+        }
+
+        // Fetch Data via PapaParse
+        function fetchData() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            Papa.parse(SHEET_CSV_URL, {
+                download: true,
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    globalData = results.data;
+                    globalData.sort((a, b) => new Date(b.Timestamp || b.Date) - new Date(a.Timestamp || a.Date));
+                    
+                    applyGlobalDateFilter(); 
+                    document.getElementById('loading-overlay').style.display = 'none';
+                },
+                error: function(err) {
+                    console.error("Error fetching CSV:", err);
+                    showSystemMessage("Error Fetching Data", "Failed to load data. Please check connection or Sheet visibility.", "error");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                }
+            });
+        }
+
+        // Apply Date Filter Globally
+        function applyGlobalDateFilter() {
+            const startVal = document.getElementById('date-start').value;
+            const endVal = document.getElementById('date-end').value;
+
+            if (!startVal && !endVal) {
+                dateFilteredData = [...globalData];
+            } else {
+                const start = startVal ? new Date(startVal) : new Date('1970-01-01');
+                const end = endVal ? new Date(endVal) : new Date('2099-12-31');
+                end.setHours(23, 59, 59, 999);
+                start.setHours(0, 0, 0, 0);
+
+                dateFilteredData = globalData.filter(row => {
+                    const rowDateStr = row.Date || row.Timestamp;
+                    if (!rowDateStr) return false;
+
+                    let parsedDate = new Date(rowDateStr);
+                    if (isNaN(parsedDate.getTime()) && rowDateStr.includes('/')) {
+                        const parts = rowDateStr.split(/[/\s:-]/);
+                        if (parts.length >= 3) {
+                            parsedDate = new Date(`${parts[2].substring(0,4)}-${parts[1]}-${parts[0]}`);
+                        }
+                    }
+
+                    if (isNaN(parsedDate.getTime())) return true; 
+                    return parsedDate >= start && parsedDate <= end;
+                });
+            }
+
+            processData(dateFilteredData);
+            
+            filterJobs();
+            filterDocs();
+            filterBilling();
+        }
+
+        function clearDateFilter() {
+            document.getElementById('date-start').value = '';
+            document.getElementById('date-end').value = '';
+            applyGlobalDateFilter();
+        }
+
+        // Process and Render all components
+        function processData(data) {
+            renderOverview(data);
+            renderJobMonitoring(data);
+            renderIssues(data);
+            renderPerformance(data);
+            renderDocuments(data);
+            renderBilling(data);
+            
+            populateFilters(globalData);
+        }
+
+        // ----- RENDER OVERVIEW -----
+        function renderOverview(data) {
+            const total = data.length;
+            const completed = data.filter(d => (d.Status || '').toLowerCase().includes('complet') || (d.Status || '').toLowerCase().includes('approv')).length;
+            const pending = data.filter(d => (d.Status || '').toLowerCase().includes('pend') || (d.Status || '').toLowerCase().includes('draft') || (d.Status || '').toLowerCase() === '').length;
+            
+            const hasIssue = (val) => {
+                const v = (val || '').trim().toLowerCase();
+                return v !== '' && v !== '-' && v !== 'none' && v !== 'n/a' && v !== 'nil';
+            };
+            const issuesCount = data.filter(d => hasIssue(d.UnresolvedIssue)).length;
+
+            document.getElementById('kpi-total').innerText = total;
+            document.getElementById('kpi-completed').innerText = completed;
+            document.getElementById('kpi-pending').innerText = pending;
+            document.getElementById('kpi-issues').innerText = issuesCount;
+
+            const tbody = document.getElementById('recent-table-body');
+            tbody.innerHTML = '';
+            data.slice(0, 5).forEach(row => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition">
+                        <td class="px-6 py-3 whitespace-nowrap">
+                            <div class="font-medium text-slate-800">${row.Date || '-'}</div>
+                            <div class="text-xs text-slate-500">${row.TimeIn || ''}</div>
+                        </td>
+                        <td class="px-6 py-3">
+                            <div class="font-medium text-slate-800">${row.ProjectTitle || '-'}</div>
+                            <div class="text-xs text-slate-500 text-truncate w-48">${row.JobDesc || ''}</div>
+                        </td>
+                        <td class="px-6 py-3 text-slate-600">${row.ClientCompany || '-'}</td>
+                        <td class="px-6 py-3">
+                            <div class="text-slate-800">${row.StaffName || '-'}</div>
+                        </td>
+                        <td class="px-6 py-3">${getStatusBadge(row.Status)}</td>
+                    </tr>
+                `;
+            });
+
+            const statusCounts = {};
+            data.forEach(d => {
+                const s = d.Status || 'Pending'; // Default empty to pending
+                statusCounts[s] = (statusCounts[s] || 0) + 1;
+            });
+            
+            if(charts.status) charts.status.destroy();
+            const ctxStatus = document.getElementById('statusChart').getContext('2d');
+            charts.status = new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(statusCounts),
+                    datasets: [{
+                        data: Object.values(statusCounts),
+                        backgroundColor: ['#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#64748b', '#8b5cf6'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12 } }
+                    },
+                    cutout: '70%'
+                }
+            });
+
+            const datesCount = {};
+            data.forEach(d => {
+                if(d.Date) datesCount[d.Date] = (datesCount[d.Date] || 0) + 1;
+            });
+            const sortedDates = Object.keys(datesCount).sort((a,b) => new Date(a) - new Date(b)).slice(-10); 
+            
+            if(charts.trend) charts.trend.destroy();
+            const ctxTrend = document.getElementById('trendChart').getContext('2d');
+            
+            const gradient = ctxTrend.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(14, 165, 233, 0.5)');   
+            gradient.addColorStop(1, 'rgba(14, 165, 233, 0.0)');
+
+            charts.trend = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: sortedDates,
+                    datasets: [{
+                        label: 'Jobs Executed',
+                        data: sortedDates.map(date => datesCount[date]),
+                        borderColor: '#0284c7',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#0284c7',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#f1f5f9' }, ticks: { stepSize: 1 } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        // ----- RENDER JOB MONITORING -----
+        function renderJobMonitoring(data) {
+            const tbody = document.getElementById('monitoring-table-body');
+            tbody.innerHTML = '';
+            
+            if(data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">No records found.</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-50 transition group">
+                        <td class="px-6 py-4 font-medium text-brand-600 whitespace-nowrap">
+                            ${row.ReportID || '-'}
+                            <div class="text-[10px] text-slate-400 font-normal uppercase mt-0.5">PO: ${row.PONumber || 'N/A'}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-slate-800">${row.Date || '-'}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-800">${row.ClientCompany || '-'}</div>
+                            <div class="text-xs text-slate-500 line-clamp-1" title="${row.ProjectTitle}">${row.ProjectTitle || '-'}</div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-600 text-sm">
+                            <i class="fa-solid fa-location-dot text-slate-400 mr-1"></i> ${row.Location || '-'}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="bg-slate-100 px-2 py-1 rounded inline-block text-xs font-mono text-slate-600">
+                                ${row.TimeIn || '--:--'} <i class="fa-solid fa-arrow-right text-[10px] mx-1"></i> ${row.TimeOut || '--:--'}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                <div class="w-6 h-6 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center text-xs font-bold mr-2">
+                                    ${row.StaffName ? row.StaffName.charAt(0) : '?'}
+                                </div>
+                                <div>
+                                    <div class="text-slate-800 font-medium text-sm">${row.StaffName || '-'}</div>
+                                    <div class="text-[10px] text-slate-500">${row.StaffPosition || ''}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${getStatusBadge(row.Status)}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function populateFilters(data) {
+            const statuses = new Set();
+            data.forEach(d => {
+                if(d.Status) statuses.add(d.Status);
+            });
+            const filterSelect = document.getElementById('filter-status');
+            filterSelect.innerHTML = '<option value="">All Statuses</option>';
+            statuses.forEach(s => {
+                filterSelect.innerHTML += `<option value="${s}">${s}</option>`;
+            });
+        }
+
+        function filterJobs() {
+            const searchVal = document.getElementById('search-job').value.toLowerCase();
+            const statusVal = document.getElementById('filter-status').value.toLowerCase();
+            
+            const filteredData = dateFilteredData.filter(row => {
+                const matchSearch = 
+                    (row.ProjectTitle || '').toLowerCase().includes(searchVal) || 
+                    (row.ClientCompany || '').toLowerCase().includes(searchVal) ||
+                    (row.ReportID || '').toLowerCase().includes(searchVal);
+                
+                const matchStatus = statusVal === '' || (row.Status || '').toLowerCase() === statusVal;
+                
+                return matchSearch && matchStatus;
+            });
+            
+            renderJobMonitoring(filteredData);
+        }
+
+        // ----- RENDER ISSUES -----
+        function renderIssues(data) {
+            const container = document.getElementById('issues-container');
+            container.innerHTML = '';
+            
+            const hasIssue = (val) => {
+                const v = (val || '').trim().toLowerCase();
+                return v !== '' && v !== '-' && v !== 'none' && v !== 'n/a' && v !== 'nil';
+            };
+            
+            const issueData = data.filter(d => hasIssue(d.UnresolvedIssue));
+            document.getElementById('issue-count-badge').innerText = issueData.length;
+
+            if(issueData.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white rounded-xl p-10 text-center border border-slate-100 shadow-sm">
+                        <div class="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
+                            <i class="fa-solid fa-shield-check"></i>
+                        </div>
+                        <h4 class="text-lg font-medium text-slate-800">All Clear!</h4>
+                        <p class="text-slate-500 mt-1">There are no unresolved issues reported at the moment.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            issueData.forEach(row => {
+                container.innerHTML += `
+                    <div class="bg-white rounded-lg p-5 border-l-4 border-red-500 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition">
+                        <div class="flex-1">
+                            <div class="flex items-center space-x-2 mb-2">
+                                <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2 py-0.5 rounded">${row.ReportID || 'No ID'}</span>
+                                <span class="text-xs text-slate-500"><i class="fa-regular fa-calendar mr-1"></i> ${row.Date || '-'}</span>
+                                <span class="text-xs text-brand-600 font-medium bg-brand-50 px-2 py-0.5 rounded">${row.ClientCompany || '-'}</span>
+                            </div>
+                            <h4 class="font-bold text-slate-800 mb-1">${row.ProjectTitle || 'Unnamed Project'}</h4>
+                            <div class="bg-red-50 text-red-800 p-3 rounded-md text-sm border border-red-100 mb-3">
+                                <strong class="text-red-900 block mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i> Issue Reported:</strong>
+                                ${row.UnresolvedIssue}
+                            </div>
+                            <p class="text-sm text-slate-600"><strong>Remarks:</strong> ${row.Remarks || 'No remarks provided.'}</p>
+                        </div>
+                        <div class="w-full md:w-64 bg-slate-50 p-4 rounded-lg flex flex-col justify-center border border-slate-100">
+                            <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Reported By</p>
+                            <p class="font-medium text-slate-800">${row.StaffName || 'Unknown Staff'}</p>
+                            <p class="text-xs text-slate-500 mb-3">${row.StaffPosition || '-'}</p>
+                            
+                            <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Client PIC</p>
+                            <p class="font-medium text-slate-800 text-sm">${row.PICName || '-'}</p>
+                            <p class="text-xs text-blue-600"><i class="fa-solid fa-phone text-[10px] mr-1"></i>${row.PICPhone || '-'}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // ----- RENDER PERFORMANCE -----
+        function renderPerformance(data) {
+            const staffStats = {};
+            data.forEach(d => {
+                if(!d.StaffName) return;
+                const name = d.StaffName;
+                if(!staffStats[name]) {
+                    staffStats[name] = { count: 0, position: d.StaffPosition || '-', lastDate: d.Date };
+                }
+                staffStats[name].count++;
+                if(new Date(d.Date) > new Date(staffStats[name].lastDate)) {
+                    staffStats[name].lastDate = d.Date;
+                }
+            });
+
+            const tbody = document.getElementById('staff-table-body');
+            tbody.innerHTML = '';
+            
+            const staffArray = Object.keys(staffStats).map(name => ({
+                name, ...staffStats[name]
+            })).sort((a,b) => b.count - a.count);
+
+            staffArray.forEach(staff => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="px-6 py-4 font-medium text-slate-800 flex items-center">
+                            <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold mr-3">
+                                ${staff.name.charAt(0)}
+                            </div>
+                            ${staff.name}
+                        </td>
+                        <td class="px-6 py-4 text-slate-600">${staff.position}</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="bg-brand-50 text-brand-700 font-bold px-3 py-1 rounded-full border border-brand-100">${staff.count}</span>
+                        </td>
+                        <td class="px-6 py-4 text-slate-500">${staff.lastDate || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            const ctxStaff = document.getElementById('staffChart').getContext('2d');
+            if(charts.staff) charts.staff.destroy();
+            charts.staff = new Chart(ctxStaff, {
+                type: 'bar',
+                data: {
+                    labels: staffArray.map(s => s.name.split(' ')[0]),
+                    datasets: [{
+                        label: 'Jobs Handled',
+                        data: staffArray.map(s => s.count),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } }
+                }
+            });
+
+            const clientStats = {};
+            data.forEach(d => {
+                if(d.ClientCompany) {
+                    clientStats[d.ClientCompany] = (clientStats[d.ClientCompany] || 0) + 1;
+                }
+            });
+            let clientArr = Object.keys(clientStats).map(c => ({name: c, count: clientStats[c]})).sort((a,b) => b.count - a.count);
+            let labels = [];
+            let counts = [];
+            if(clientArr.length > 5) {
+                labels = clientArr.slice(0,5).map(c => c.name.substring(0, 15) + (c.name.length > 15 ? '...' : ''));
+                counts = clientArr.slice(0,5).map(c => c.count);
+                const others = clientArr.slice(5).reduce((sum, c) => sum + c.count, 0);
+                labels.push('Others');
+                counts.push(others);
+            } else {
+                labels = clientArr.map(c => c.name);
+                counts = clientArr.map(c => c.count);
+            }
+
+            const ctxClient = document.getElementById('clientChart').getContext('2d');
+            if(charts.client) charts.client.destroy();
+            charts.client = new Chart(ctxClient, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#64748b', '#cbd5e1'],
+                        borderWidth: 2, borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: {size: 11} } } }
+                }
+            });
+        }
+
+        function getPdfUrl(idOrUrl) {
+            if (!idOrUrl) return '#';
+            if (idOrUrl.startsWith('http')) return idOrUrl;
+            return `https://drive.google.com/file/d/${idOrUrl}/view`;
+        }
+
+        function formatPhoneForWa(phone) {
+            if (!phone) return '';
+            let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+            if (cleaned.startsWith('0')) {
+                cleaned = '60' + cleaned.substring(1);
+            }
+            return cleaned;
+        }
+
+        function copyToClipboard(text, btnElement) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; 
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                if (btnElement) {
+                    const originalHtml = btnElement.innerHTML;
+                    btnElement.innerHTML = '<i class="fa-solid fa-check mr-1 text-emerald-500"></i> Berjaya Salin';
+                    btnElement.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+                    btnElement.classList.remove('bg-slate-100', 'text-slate-600', 'border-slate-200');
+                    
+                    setTimeout(() => {
+                        btnElement.innerHTML = originalHtml;
+                        btnElement.classList.remove('bg-emerald-50', 'text-emerald-700', 'border-emerald-200');
+                        btnElement.classList.add('bg-slate-100', 'text-slate-600', 'border-slate-200');
+                    }, 2500);
+                }
+            } catch (err) {
+                console.error('Gagal untuk salin URL', err);
+                showSystemMessage('Gagal', 'Gagal menyalin URL. Sila cuba lagi.', 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // ----- RENDER DOCUMENTS -----
+        function renderDocuments(data) {
+            const tbody = document.getElementById('document-table-body');
+            tbody.innerHTML = '';
+            
+            data.forEach(row => {
+                const hasDraft = !!(row.DraftPdfId && row.DraftPdfId.trim() !== '');
+                const hasFinal = !!(row.FinalPdfId && row.FinalPdfId.trim() !== '');
+                const isApproved = (row.Status || '').toLowerCase() === 'approved' || (row.Status || '').toLowerCase() === 'completed';
+
+                const draftUrl = hasDraft ? getPdfUrl(row.DraftPdfId.trim()) : '#';
+                const finalUrl = hasFinal ? getPdfUrl(row.FinalPdfId.trim()) : '#';
+
+                const clientName = row.ClientSignName || row.PICName || 'Tuan/Puan';
+                const projectName = row.ProjectTitle || 'projek berkaitan';
+                const rawPhone = row.ClientPhone || row.PICPhone || '';
+                const waPhone = formatPhoneForWa(rawPhone);
+                const emailAddr = row.ClientEmail || '';
+                
+                const docDate = row.Date || 'Tarikh Tidak Dinyatakan';
+                const docTime = row.TimeOut || row.TimeIn || 'Masa Tidak Dinyatakan';
+                const approvalUrl = row.ApprovalToken ? `${APP_SCRIPT_URL}?token=${row.ApprovalToken.trim()}` : '';
+
+                let subject = '';
+                let bodyMsg = '';
+                let waBodyMsg = '';
+
+                if (isApproved) {
+                    subject = `GWR Selesai - ${row.ReportID}`;
+                    bodyMsg = `Hi ${clientName},\n\nTerima kasih kerana telah menyemak dan menandatangani GWR untuk projek ${projectName}.\n\nAnda boleh merujuk salinan akhir kerja anda.\n\nTerima kasih dari Voltake.`;
+                    waBodyMsg = bodyMsg;
+                } else {
+                    subject = `Tindakan Diperlukan: GWR Belum Ditandatangani - ${row.ReportID}`;
+                    bodyMsg = `Hi ${clientName},\n\nSila maklum bahawa anda masih tidak lagi selesai menandatangani GWR untuk projek ${projectName}. Sila semak draf laporan terkini dan berikan kelulusan anda supaya kami dapat memproses dokumen akhir.\n\nSila klik link ini untuk meluluskan: ${approvalUrl}\n\nTerima kasih dari Voltake.`;
+                    waBodyMsg = `Berikut merupakan Ground Work Report Form | ${docDate} | ${docTime}\nSila tekan link di bawah untuk approve kerja hari ini\n\n${approvalUrl}\n\nVOLTAKE TEAM`;
+                }
+
+                const encodedSubject = encodeURIComponent(subject);
+                const encodedBody = encodeURIComponent(bodyMsg);
+                const encodedWaBody = encodeURIComponent(waBodyMsg);
+                
+                const mailtoLink = `mailto:${emailAddr}?subject=${encodedSubject}&body=${encodedBody}`;
+                const waLink = waPhone ? `https://wa.me/${waPhone}?text=${encodedWaBody}` : '#';
+
+                let approvalStatusHtml = '';
+                if (isApproved) {
+                    approvalStatusHtml = `
+                        <span class="flex items-center text-emerald-600 text-sm font-medium"><i class="fa-solid fa-check-circle mr-1.5"></i> Client Signed</span>
+                        <div class="text-[10px] text-slate-400 font-mono mt-1 break-all" style="max-width: 150px;">Token: ${row.ApprovalToken || 'N/A'}</div>
+                    `;
+                } else {
+                    approvalStatusHtml = `
+                        <span class="flex items-center text-amber-500 text-sm font-medium"><i class="fa-regular fa-clock mr-1.5"></i> Pending Sign</span>
+                        ${row.ApprovalToken ? `
+                        <div class="mt-2">
+                            <button onclick="copyToClipboard('${approvalUrl}', this)" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium py-1 px-2 rounded border border-slate-200 transition flex items-center w-max cursor-pointer" title="Salin URL Kelulusan">
+                                <i class="fa-regular fa-copy mr-1"></i> Salin Link Approval
+                            </button>
+                        </div>
+                        ` : `<div class="text-[10px] text-slate-400 mt-1 italic">Tiada Token</div>`}
+                    `;
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-brand-600">${row.ReportID || '-'}</div>
+                            <div class="text-xs text-slate-500 mt-1">${row.Date || '-'}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-slate-800 font-medium">${clientName}</div>
+                            <div class="text-xs text-slate-500">${row.ClientCompany || '-'}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${hasDraft 
+                                ? `<a href="${draftUrl}" target="_blank" class="inline-flex text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded text-xs font-medium border border-brand-200 transition items-center w-max"><i class="fa-regular fa-file-pdf mr-1.5 text-red-500"></i> View Draft</a>` 
+                                : `<span class="text-xs text-slate-400 italic">No Draft</span>`}
+                        </td>
+                        <td class="px-6 py-4">
+                            ${approvalStatusHtml}
+                        </td>
+                        <td class="px-6 py-4">
+                            ${hasFinal 
+                                ? `<a href="${finalUrl}" target="_blank" class="inline-flex text-slate-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded text-xs font-medium border border-slate-300 transition items-center w-max"><i class="fa-solid fa-file-pdf mr-1.5 text-red-600"></i> Download Final</a>` 
+                                : `<span class="text-xs text-slate-400 italic">Not Generated</span>`}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="${emailAddr ? mailtoLink : '#'}" 
+                               class="inline-block ${emailAddr ? 'text-slate-500 hover:text-brand-600' : 'text-slate-300 cursor-not-allowed'} transition p-2" 
+                               title="${emailAddr ? 'Hantar Email' : 'Tiada Email Client'}">
+                                <i class="fa-solid fa-envelope text-lg"></i>
+                            </a>
+                            <a href="${waLink}" target="${waPhone ? '_blank' : '_self'}" 
+                               class="inline-block ${waPhone ? 'text-slate-500 hover:text-green-500' : 'text-slate-300 cursor-not-allowed'} transition p-2" 
+                               title="${waPhone ? 'Hantar WhatsApp' : 'Tiada Nombor Telefon'}">
+                                <i class="fa-brands fa-whatsapp text-lg"></i>
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function filterDocs() {
+            const searchVal = document.getElementById('search-doc').value.toLowerCase();
+            // Use dateFilteredData instead of globalData
+            const filteredData = dateFilteredData.filter(row => {
+                return (row.ReportID || '').toLowerCase().includes(searchVal) || 
+                       (row.ClientCompany || '').toLowerCase().includes(searchVal);
+            });
+            renderDocuments(filteredData);
+        }
+
+        // ----- RENDER BILLING & APPROVAL -----
+        let currentBillingPage = 1;
+        const billingItemsPerPage = 10;
+
+        function renderBilling(data) {
+            const tbody = document.getElementById('billing-table-body');
+            tbody.innerHTML = '';
+            
+            let countPendingMgr = 0;
+            let countPendingInv = 0;
+            let countDone = 0;
+            
+            // Tapis data yang dah melepasi tahap 'Client Signed' sahaja untuk tab inbois
+            const billingData = data.filter(r => {
+                const s = (r.Status || '').toLowerCase();
+                return s === 'approved' || s === 'pending invoice' || s === 'completed';
+            });
+
+            // Asingkan pengiraan KPI
+            billingData.forEach(row => {
+                const mgrStatus = row.ManagerApproval || 'Pending';
+                const invStatus = row.InvoiceStatus || 'No Invoice Yet';
+                const gwrStatus = row.Status || 'Pending';
+                
+                if (mgrStatus === 'Pending') countPendingMgr++;
+                else if (invStatus === 'No Invoice Yet' || gwrStatus === 'Pending Invoice') countPendingInv++;
+                else if (gwrStatus === 'Completed') countDone++;
+            });
+
+            // Susunan (Sorting): Latest to Oldest, tetapi Submitted atau Rejected dicampak ke belakang
+            const sortedData = [...billingData].sort((a, b) => {
+                const checkDoneOrReject = (r) => {
+                    const invStr = (r.InvoiceStatus || '').toLowerCase();
+                    const gwrStr = (r.Status || '').toLowerCase();
+                    const mgrStr = (r.ManagerApproval || '').toLowerCase();
+                    
+                    return invStr.includes('submitted') || 
+                           gwrStr === 'completed' || 
+                           mgrStr.includes('reject') || 
+                           gwrStr.includes('reject');
+                };
+
+                const aFinished = checkDoneOrReject(a);
+                const bFinished = checkDoneOrReject(b);
+                
+                if (aFinished && !bFinished) return 1; // 'a' dah siap atau di-reject, campak belakang
+                if (!aFinished && bFinished) return -1; // 'b' dah siap atau di-reject, campak belakang
+                
+                // Jika kedua-duanya sama status (belum siap/dah siap), susun ikut tarikh terkini
+                return new Date(b.Timestamp || b.Date) - new Date(a.Timestamp || a.Date);
+            });
+
+            // Pagination Logic
+            const totalPages = Math.ceil(sortedData.length / billingItemsPerPage) || 1;
+            if (currentBillingPage > totalPages) currentBillingPage = totalPages;
+            if (currentBillingPage < 1) currentBillingPage = 1;
+
+            const startIndex = (currentBillingPage - 1) * billingItemsPerPage;
+            const paginatedData = sortedData.slice(startIndex, startIndex + billingItemsPerPage);
+
+            if (paginatedData.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-slate-500">Tiada rekod dijumpai.</td></tr>`;
+            }
+
+            paginatedData.forEach(row => {
+                const mgrStatus = row.ManagerApproval || 'Pending';
+                const invStatus = row.InvoiceStatus || 'No Invoice Yet';
+                const gwrStatus = row.Status || 'Pending';
+                
+                const mgrBadgeClass = mgrStatus.includes('Approved') ? 'bg-emerald-100 text-emerald-700' : (mgrStatus.includes('Reject') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700');
+                const invBadgeClass = invStatus.includes('Submitted') ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600';
+                
+                const finalUrl = row.FinalPdfId ? getPdfUrl(row.FinalPdfId.trim()) : '#';
+                
+                const btnMgrHtml = `<button onclick="openManagerModal('${row.ReportID}')" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded text-xs font-medium transition shadow-sm w-full mb-2">Manager Action</button>`;
+                
+                const isMgrApproved = mgrStatus.includes('Approved');
+                const btnInvHtml = isMgrApproved 
+                    ? `<button onclick="openInvoiceModal('${row.ReportID}')" class="bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded text-xs font-medium transition shadow-sm w-full"><i class="fa-solid fa-cloud-arrow-up mr-1"></i> Upload Invoice</button>`
+                    : `<button disabled class="bg-slate-50 border border-slate-200 text-slate-400 px-3 py-1.5 rounded text-xs font-medium cursor-not-allowed w-full"><i class="fa-solid fa-lock mr-1"></i> Lock Invoice</button>`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+                        <td class="px-6 py-4">
+                            <div class="font-bold text-slate-800">${row.ReportID || '-'}</div>
+                            <div class="text-xs text-slate-500 mt-0.5">${row.Date || '-'}</div>
+                            <div class="text-xs text-brand-600 font-medium mt-1">${row.ClientCompany || '-'}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${getStatusBadge(gwrStatus)}
+                            ${row.FinalPdfId ? `<div class="mt-2"><button onclick="openPdfModal('${finalUrl}', '${row.ReportID}')" class="text-[10px] text-blue-600 hover:underline cursor-pointer"><i class="fa-solid fa-file-pdf text-red-500 mr-1"></i>View GWR</button></div>` : ''}
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2.5 py-1 text-[10px] font-bold rounded-full ${mgrBadgeClass} border">${mgrStatus}</span>
+                            ${row.ManagerRemarks ? `<div class="text-[10px] text-slate-500 mt-1.5 bg-slate-50 p-1.5 rounded border border-slate-100 line-clamp-2" title="${row.ManagerRemarks}"><i class="fa-regular fa-comment-dots mr-1"></i>${row.ManagerRemarks}</div>` : ''}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-xs font-bold text-slate-700 mb-1">${row.InvoiceNumber && row.InvoiceNumber !== '-' ? row.InvoiceNumber : 'No Inv #'}</div>
+                            <span class="px-2 py-0.5 text-[10px] font-medium rounded ${invBadgeClass}">${invStatus}</span>
+                            ${row.InvoiceLink && row.InvoiceLink !== '-' ? `<div class="mt-1.5"><button onclick="openPdfModal('${row.InvoiceLink}', 'Invoice ${row.InvoiceNumber || row.ReportID}')" class="text-[10px] text-indigo-600 hover:underline cursor-pointer"><i class="fa-solid fa-file-pdf text-red-500 mr-1"></i>View Invoice</button></div>` : ''}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            ${btnMgrHtml}
+                            ${btnInvHtml}
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            // Render Pagination Controls
+            const paginationContainer = document.getElementById('billing-pagination');
+            if (paginationContainer) {
+                const totalItems = sortedData.length;
+                const startItem = totalItems > 0 ? startIndex + 1 : 0;
+                const endItem = Math.min(startIndex + billingItemsPerPage, totalItems);
+                
+                paginationContainer.innerHTML = `
+                    <div class="text-xs text-slate-500">
+                        Menunjukkan <strong>${startItem}</strong> - <strong>${endItem}</strong> daripada <strong>${totalItems}</strong> rekod
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="changeBillingPage(-1)" class="px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition" ${currentBillingPage === 1 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <span class="px-3 py-1.5 text-sm text-slate-600 font-medium border border-slate-200 bg-white rounded">Muka ${currentBillingPage} / ${totalPages}</span>
+                        <button onclick="changeBillingPage(1)" class="px-3 py-1.5 border border-slate-300 rounded text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition" ${currentBillingPage === totalPages ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('bill-kpi-mgr').innerText = countPendingMgr;
+            document.getElementById('bill-kpi-inv').innerText = countPendingInv;
+            document.getElementById('bill-kpi-done').innerText = countDone;
+        }
+
+        function filterBilling(keepPage = false) {
+            if (!keepPage) currentBillingPage = 1; // Reset ke muka 1 jika carian berubah
+            
+            const searchVal = document.getElementById('search-billing').value.toLowerCase();
+            const statusFilter = document.getElementById('filter-billing-status').value;
+            
+            const filteredData = dateFilteredData.filter(row => {
+                const matchSearch = (row.ReportID || '').toLowerCase().includes(searchVal) || 
+                                    (row.ClientCompany || '').toLowerCase().includes(searchVal);
+                
+                let matchStatus = true;
+                if (statusFilter !== '') {
+                    const mgrStatus = row.ManagerApproval || 'Pending';
+                    const invStatus = row.InvoiceStatus || 'No Invoice Yet';
+                    const gwrStatus = (row.Status || '').toLowerCase();
+                    
+                    if (statusFilter === 'pending_manager') {
+                        matchStatus = mgrStatus === 'Pending';
+                    } else if (statusFilter === 'pending_invoice') {
+                        matchStatus = (mgrStatus.includes('Approved')) && (!invStatus.includes('Submitted'));
+                    } else if (statusFilter === 'completed') {
+                        matchStatus = invStatus.includes('Submitted') || gwrStatus === 'completed';
+                    }
+                }
+                
+                return matchSearch && matchStatus;
+            });
+            renderBilling(filteredData);
+        }
+
+        function changeBillingPage(dir) {
+            currentBillingPage += dir;
+            filterBilling(true);
+        }
+
+    </script>
+</body>
+</html>
