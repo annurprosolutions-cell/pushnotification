@@ -24,10 +24,6 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- FIREBASE SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
-
     <script>
         tailwind.config = {
             theme: {
@@ -314,12 +310,6 @@
             </div>
             
             <div class="flex items-center space-x-2 md:space-x-3 overflow-x-auto pb-1 lg:pb-0 no-scrollbar w-full lg:w-auto">
-                
-                <!-- Butang Loceng Firebase -->
-                <button id="btn-notification" onclick="requestNotificationPermission()" class="shrink-0 bg-white border border-slate-300 text-slate-700 w-8 h-8 md:w-9 md:h-9 rounded-full flex items-center justify-center hover:bg-brand-50 hover:text-brand-600 transition relative" title="Aktifkan Notifikasi">
-                    <i class="fa-regular fa-bell"></i>
-                </button>
-
                 <!-- Global Date Filter -->
                 <div class="flex items-center bg-slate-50 p-1 rounded-md border border-slate-200 shrink-0">
                     <div class="flex items-center">
@@ -680,65 +670,8 @@
     <script>
         // Data Source
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSeATqCPNGcMaBHDykMLxFxXixrHwYlvSQPEBPhag8xlcq5TRzM7O_zMGWPvYpoTVY6kuAHuqhugKS3/pub?output=csv';
-        const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw7JXlTtCDUsI3vk1uxar3jXXJwimZxrGm9MGUQDwnGNb6fYoeE3AJP9XtlXQUk4QlTrw/exec';
+        const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznq_4PSpixJsIqn9EvLIk7LgNWclmoKPwGIaCnL53py4XXy7yHWLA7zXYVXlxtvyjAWw/exec';
         
-        // ==========================================
-        // FIREBASE SETUP (Tukar Kunci Ini!)
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyBuJrhF_vZp0XrTuIyqrwhA97ZRLIyEyws",
-            authDomain: "push-notification-e1c27.firebaseapp.com",
-            projectId: "push-notification-e1c27",
-            storageBucket: "push-notification-e1c27.firebasestorage.app",
-            messagingSenderId: "300221580577",
-            appId: "1:300221580577:web:8d569cdb0c6002b9cfaa60"
-        };
-        const FIREBASE_VAPID_KEY = "BG15BCViFaO4f9boBS7OmBUiz2LyNiGy8GbxWXiX5C__RyJmWa2AKv1dV6NdjeSdJ9-IJ8hfynx3u_HHJ5t3W4U";
-
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const messaging = firebase.messaging();
-
-        function requestNotificationPermission() {
-            const btnBell = document.getElementById('btn-notification');
-            
-            Notification.requestPermission().then((permission) => {
-                if (permission === 'granted') {
-                    btnBell.innerHTML = '<i class="fa-solid fa-bell text-brand-500"></i>';
-                    
-                    messaging.getToken({ vapidKey: FIREBASE_VAPID_KEY }).then((currentToken) => {
-                        if (currentToken) {
-                            console.log("FCM Token:", currentToken);
-                            saveTokenToAppsScript(currentToken);
-                        } else {
-                            showSystemMessage("Notifikasi", "Gagal mendapatkan token pendaftaran. Pastikan Service Worker wujud.", "warning");
-                        }
-                    }).catch((err) => {
-                        console.error('An error occurred while retrieving token. ', err);
-                    });
-                } else {
-                    showSystemMessage("Akses Ditolak", "Anda tidak membenarkan notifikasi dihantar ke pelayar ini.", "error");
-                }
-            });
-        }
-
-        function saveTokenToAppsScript(token) {
-            fetch(APP_SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'save_fcm_token', fcmToken: token })
-            }).then(res => res.json()).then(data => {
-                if(data.status === 'success') {
-                    showSystemMessage("Berjaya", "Sistem notifikasi diaktifkan untuk peranti ini.", "success");
-                }
-            });
-        }
-
-        // Handle notifikasi masuk semasa App sedang dibuka (Foreground)
-        messaging.onMessage((payload) => {
-            showSystemMessage("Notifikasi Baru: " + payload.notification.title, payload.notification.body, "info");
-            fetchData(); // Automatik refresh data bila ada notifikasi masuk
-        });
-
         // Global State
         let globalData = [];
         let dateFilteredData = [];
